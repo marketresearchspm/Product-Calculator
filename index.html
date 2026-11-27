@@ -93,6 +93,7 @@
       <select id="mode"><option value="inc">Include PPN</option><option value="exc">Exclude PPN</option></select></div>
     <div class="row"><label>Rencana Harga / Pack<small id="priceNote">Include PPN</small></label><input id="price" type="number" inputmode="decimal" step="any" min="0" value="25000"></div>
     <div class="row"><label>PPN (%)</label><input id="ppn" type="number" inputmode="decimal" step="any" min="0" value="11"></div>
+    <div class="row"><label>PPh (%)<small>Isi 0 jika tidak dipotong</small></label><input id="pph" type="number" inputmode="decimal" step="any" min="0" value="11"></div>
 
     <div class="btns">
       <button class="primary" onclick="saveHistory()">Simpan ke Riwayat</button>
@@ -103,7 +104,7 @@
   <div class="card result">
     <h2>Hasil</h2>
     <div class="kpi main">
-      <div class="lbl">Price / KG (Exclude PPN)</div>
+      <div class="lbl" id="l_kgMain">Price / KG (Exclude PPN &amp; PPh)</div>
       <div class="val" id="o_kgExc">-</div>
       <div class="sub" id="o_kgInc">-</div>
     </div>
@@ -119,7 +120,7 @@
       <div class="kpi"><div class="lbl">Total Sheet</div><div class="val" id="o_totalSheet">-</div></div>
     </div>
     <div class="note">
-      Price/KG = Harga Pack Exc PPN ÷ Berat × 1.000. Jika input Include PPN, harga dibagi (1 + PPN) dulu.<br>
+      Price/KG = Harga Pack Exc PPN ÷ (1 + PPh) ÷ Berat × 1.000. Jika input Include PPN, harga dibagi (1 + PPN) dulu.<br>
       Harga/Unit = harga per pack ÷ isi bundling. Harga/Sheet = harga per unit ÷ sheets.
     </div>
   </div>
@@ -135,7 +136,7 @@
 <div id="toast"></div>
 
 <script>
-var DEFAULTS = { ply: 2, sheets: 200, gsm: 15, length: 19, width: 18, bundling: 1, price: 25000, ppn: 11 };
+var DEFAULTS = { ply: 2, sheets: 200, gsm: 15, length: 19, width: 18, bundling: 1, price: 25000, ppn: 11, pph: 11 };
 
 function $(id){ return document.getElementById(id); }
 function n(id){ var v = parseFloat($(id).value); return isFinite(v) ? v : 0; }
@@ -144,20 +145,23 @@ function fmt(x, d){ return Number(x || 0).toLocaleString('id-ID', { maximumFract
 
 function calculate(){
   var ply = n('ply'), sheets = n('sheets'), gsm = n('gsm'), L = n('length'), W = n('width');
-  var isi = n('bundling') || 1, price = n('price'), ppn = n('ppn') / 100;
+  var isi = n('bundling') || 1, price = n('price'), ppn = n('ppn') / 100, pph = n('pph') / 100;
 
   var weight   = L * W / 10000 * sheets * gsm * ply * isi;   // gram per pack
   var isExc    = $('mode').value === 'exc';
   var priceExc = isExc ? price : price / (1 + ppn);   // harga tanpa PPN
   var priceInc = isExc ? price * (1 + ppn) : price;   // harga dengan PPN
-  var kgExc    = weight ? priceExc / weight * 1000 : 0;
+  var kgPpn    = weight ? priceExc / weight * 1000 : 0;          // exclude PPN saja
+  var kgExc    = kgPpn / (1 + pph);                                // exclude PPN & PPh (hasil utama)
   var kgInc    = weight ? priceInc / weight * 1000 : 0;
   var unit     = priceExc / isi;
   var perSheet = sheets ? unit / sheets : 0;
 
   $('o_weight').textContent     = fmt(weight, 2) + ' gr';
   $('o_kgExc').textContent      = weight ? rp(kgExc) : '-';
-  $('o_kgInc').textContent      = weight ? 'Include PPN: ' + rp(kgInc) + ' / kg' : 'Lengkapi spesifikasi untuk menghitung berat';
+  $('l_kgMain').innerHTML       = pph ? 'Price / KG (Exclude PPN &amp; PPh)' : 'Price / KG (Exclude PPN)';
+  $('o_kgInc').textContent      = !weight ? 'Lengkapi spesifikasi untuk menghitung berat' :
+    (pph ? 'Exclude PPN saja: ' + rp(kgPpn) + ' · ' : '') + 'Include PPN: ' + rp(kgInc) + ' / kg';
   $('priceNote').textContent    = isExc ? 'Exclude PPN' : 'Include PPN';
   $('l_priceOther').textContent = isExc ? 'Harga / Pack Inc PPN' : 'Harga / Pack Exc PPN';
   $('o_priceExc').textContent   = rp(isExc ? priceInc : priceExc);
@@ -169,7 +173,7 @@ function calculate(){
 }
 
 // ===== RIWAYAT (maks 10, FIFO) =====
-var HKEY = 'pricekg_history_v1', HMAX = 10, FIELDS = ['ply','sheets','gsm','length','width','bundling','price','ppn'];
+var HKEY = 'pricekg_history_v1', HMAX = 10, FIELDS = ['ply','sheets','gsm','length','width','bundling','price','ppn','pph'];
 
 function loadHistory(){
   try { var h = JSON.parse(localStorage.getItem(HKEY) || '[]'); return Array.isArray(h) ? h : []; }
@@ -198,7 +202,7 @@ function saveHistory(){
 
 function useHistory(i){
   var e = loadHistory()[i]; if (!e) return;
-  FIELDS.forEach(function(f){ $(f).value = e[f]; });
+  FIELDS.forEach(function(f){ $(f).value = (e[f] !== undefined) ? e[f] : (f === 'pph' ? 0 : DEFAULTS[f]); });
   $('mode').value = e.mode || 'inc';
   calculate();
   window.scrollTo({ top: 0, behavior: 'smooth' });
@@ -236,6 +240,7 @@ function renderHistory(){
 function resetForm(){
   ['ply','sheets','gsm','length','width','bundling','price'].forEach(function(k){ $(k).value = 0; });
   $('ppn').value = 11;
+  $('pph').value = 11;
 
   calculate();
 }
