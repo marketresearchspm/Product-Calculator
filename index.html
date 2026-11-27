@@ -30,6 +30,24 @@
   .mini .kpi .val { font-size: 17px; }
   button { background: #fff; color: #1f4e79; border: 1px solid #1f4e79; border-radius: 6px; padding: 9px 16px; cursor: pointer; font-size: 13px; margin-top: 8px; }
   .note { font-size: 11px; color: #667; margin-top: 10px; line-height: 1.5; }
+  .btns { display: flex; gap: 8px; flex-wrap: wrap; }
+  button.primary { background: #1f4e79; color: #fff; }
+  button.small { padding: 4px 9px; font-size: 12px; margin: 0; }
+  button.danger { color: #c0392b; border-color: #c0392b; }
+  .card.history { grid-column: 1 / -1; }
+  .wrap > * { min-width: 0; }
+  .hhead { display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px; }
+  .hhead h2 { margin: 0; }
+  .link { background: none; border: 0; color: #c0392b; padding: 0; margin: 0; font-size: 12px; cursor: pointer; }
+  .hitem { display: flex; align-items: center; gap: 10px; padding: 9px 0; border-bottom: 1px solid #eceff2; }
+  .hitem:last-child { border-bottom: 0; }
+  .hitem .info { flex: 1; min-width: 0; }
+  .hitem .kg { font-weight: bold; font-size: 15px; color: #1f4e79; }
+  .hitem .det { font-size: 12px; color: #778; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .hitem button { margin: 0; padding: 5px 10px; font-size: 12px; }
+  .hitem .x { border: 0; color: #aab; font-size: 18px; padding: 0 4px; background: none; }
+  .empty { color: #889; font-size: 13px; padding: 8px 0; }
+  #toast { position: fixed; left: 50%; bottom: 20px; transform: translateX(-50%); background: #1f4e79; color: #fff; padding: 9px 16px; border-radius: 6px; font-size: 13px; display: none; z-index: 9; }
 
   /* Tablet & HP: kolom input dan hasil ditumpuk; hasil tampil di atas */
   @media (max-width: 760px) {
@@ -48,7 +66,8 @@
     .kpi.main .val { font-size: 28px; }
     .kpi .val { font-size: 20px; }
     .mini .kpi .val { font-size: 15px; }
-    button { width: 100%; }
+    .btns button { width: 100%; }
+    .hhead { flex-wrap: wrap; }
   }
 </style>
 </head>
@@ -72,7 +91,10 @@
     <div class="row"><label>Rencana Harga / Pack<small>Include PPN</small></label><input id="price" type="number" inputmode="decimal" step="any" min="0" value="25000"></div>
     <div class="row"><label>PPN (%)</label><input id="ppn" type="number" inputmode="decimal" step="any" min="0" value="11"></div>
 
-    <button onclick="resetForm()">Reset</button>
+    <div class="btns">
+      <button class="primary" onclick="saveHistory()">Simpan ke Riwayat</button>
+      <button onclick="resetForm()">Reset</button>
+    </div>
   </div>
 
   <div class="card result">
@@ -88,17 +110,26 @@
       <div class="sub">P x L / 10.000 x Sheets x GSM x Ply x Isi</div>
     </div>
     <div class="mini">
-      <div class="kpi"><div class="lbl">Harga / SKU Exc PPN</div><div class="val" id="o_priceExc">-</div></div>
+      <div class="kpi"><div class="lbl">Harga / Pack Exc PPN</div><div class="val" id="o_priceExc">-</div></div>
       <div class="kpi"><div class="lbl">Harga / Unit Exc PPN</div><div class="val" id="o_unit">-</div></div>
       <div class="kpi"><div class="lbl">Harga / Sheet Exc PPN</div><div class="val" id="o_sheet">-</div></div>
-      <div class="kpi"><div class="lbl">Total Sheets</div><div class="val" id="o_totalSheet">-</div></div>
+      <div class="kpi"><div class="lbl">Total Sheet / Pack</div><div class="val" id="o_totalSheet">-</div></div>
     </div>
     <div class="note">
       Price/KG = Harga Pack ÷ (1 + PPN) ÷ Berat × 1.000.<br>
       Harga/Unit = harga per pack ÷ isi bundling. Harga/Sheet = harga per unit ÷ sheets.
     </div>
   </div>
+
+  <div class="card history">
+    <div class="hhead">
+      <h2>Riwayat (<span id="hCount">0</span>/10)</h2>
+      <button class="link" onclick="clearHistory()">Hapus semua</button>
+    </div>
+    <div id="hList"></div>
+  </div>
 </div>
+<div id="toast"></div>
 
 <script>
 var DEFAULTS = { ply: 2, sheets: 200, gsm: 15, length: 19, width: 18, bundling: 1, price: 25000, ppn: 11 };
@@ -126,17 +157,82 @@ function calculate(){
   $('o_unit').textContent       = rp(unit);
   $('o_sheet').textContent      = rp(perSheet, 2);
   $('o_totalSheet').textContent = fmt(sheets * isi, 0);
+  return { weight: weight, kgExc: kgExc };
+}
+
+// ===== RIWAYAT (maks 10, FIFO) =====
+var HKEY = 'pricekg_history_v1', HMAX = 10, FIELDS = ['ply','sheets','gsm','length','width','bundling','price','ppn'];
+
+function loadHistory(){
+  try { var h = JSON.parse(localStorage.getItem(HKEY) || '[]'); return Array.isArray(h) ? h : []; }
+  catch (e) { return []; }
+}
+function storeHistory(h){
+  try { localStorage.setItem(HKEY, JSON.stringify(h)); return true; }
+  catch (e) { toast('Browser ini tidak mengizinkan penyimpanan riwayat'); return false; }
+}
+function toast(msg){
+  var t = $('toast'); t.textContent = msg; t.style.display = 'block';
+  clearTimeout(toast._t); toast._t = setTimeout(function(){ t.style.display = 'none'; }, 2200);
+}
+
+function saveHistory(){
+  var r = calculate();
+  if (!r.weight || !n('price')) { toast('Isi spesifikasi & harga dulu sebelum menyimpan'); return; }
+  var entry = { time: Date.now(), weight: r.weight, kgExc: r.kgExc };
+  FIELDS.forEach(function(f){ entry[f] = n(f); });
+  var h = loadHistory();
+  h.push(entry);                       // tambah di akhir (terbaru)
+  while (h.length > HMAX) h.shift();   // hapus yang paling lama
+  if (storeHistory(h)) { renderHistory(); toast('Tersimpan ke riwayat'); }
+}
+
+function useHistory(i){
+  var e = loadHistory()[i]; if (!e) return;
+  FIELDS.forEach(function(f){ $(f).value = e[f]; });
+  calculate();
+  window.scrollTo({ top: 0, behavior: 'smooth' });
+  toast('Perhitungan dimuat');
+}
+function deleteHistory(i){
+  var h = loadHistory(); h.splice(i, 1);
+  if (storeHistory(h)) renderHistory();
+}
+function clearHistory(){
+  if (!loadHistory().length) return;
+  if (!confirm('Hapus semua riwayat perhitungan?')) return;
+  if (storeHistory([])) renderHistory();
+}
+
+function renderHistory(){
+  var h = loadHistory();
+  $('hCount').textContent = h.length;
+  if (!h.length) { $('hList').innerHTML = '<div class="empty">Belum ada riwayat.</div>'; return; }
+  var html = '';
+  for (var i = h.length - 1; i >= 0; i--) {   // terbaru di atas
+    var e = h[i], d = new Date(e.time);
+    var waktu = d.toLocaleDateString('id-ID', { day: '2-digit', month: 'short' }) + ' ' +
+                d.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' });
+    html += '<div class="hitem"><div class="info">' +
+      '<div class="kg">' + rp(e.kgExc) + ' /kg</div>' +
+      '<div class="det">' + rp(e.price) + ' · ' + fmt(e.ply, 1) + 'ply ' + fmt(e.sheets, 0) + 'sh ' + fmt(e.gsm, 1) + 'gsm · ' + waktu + '</div>' +
+      '</div><button onclick="useHistory(' + i + ')">Pakai</button>' +
+      '<button class="x" title="Hapus" onclick="deleteHistory(' + i + ')">×</button></div>';
+  }
+  $('hList').innerHTML = html;
 }
 
 // Reset: semua input jadi 0, kecuali PPN tetap 11%
 function resetForm(){
   ['ply','sheets','gsm','length','width','bundling','price'].forEach(function(k){ $(k).value = 0; });
   $('ppn').value = 11;
+
   calculate();
 }
 
 document.addEventListener('input', calculate);
 calculate();
+renderHistory();
 </script>
 </body>
 </html>
