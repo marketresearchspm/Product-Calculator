@@ -18,6 +18,7 @@
   .row { display: grid; grid-template-columns: 1fr 150px; align-items: center; gap: 10px; margin-bottom: 9px; }
   .row label small { display: block; color: #778; font-size: 11px; }
   input { width: 100%; padding: 8px 10px; border: 1px solid #c8d0d8; border-radius: 6px; font-size: 15px; background: #fffbe6; text-align: right; }
+  select { width: 100%; padding: 8px 10px; border: 1px solid #c8d0d8; border-radius: 6px; font-size: 15px; background: #fff; }
   input:focus { outline: 2px solid #2e86c1; border-color: #2e86c1; }
   .kpi { background: #f7f9fb; border: 1px solid #e3e8ed; border-radius: 8px; padding: 12px; margin-bottom: 10px; }
   .kpi.main { background: #1f4e79; color: #fff; border-color: #1f4e79; }
@@ -62,7 +63,7 @@
     .wrap { padding: 10px; gap: 10px; }
     .card { padding: 12px; }
     .row { grid-template-columns: 1fr 130px; gap: 8px; }
-    input { font-size: 16px; padding: 10px; } /* 16px mencegah auto-zoom di iPhone */
+    input, select { font-size: 16px; padding: 10px; } /* 16px mencegah auto-zoom di iPhone */
     .kpi.main .val { font-size: 28px; }
     .kpi .val { font-size: 20px; }
     .mini .kpi .val { font-size: 15px; }
@@ -74,7 +75,7 @@
 <body>
 <header>
   <h1>Kalkulator Price / KG Produk Baru</h1>
-  <small>Market Research PT Suparma Tbk. (2026 Vers.) </small>
+  <small>Market Research PT Suparma Tbk. (2026 Vers.)</small>
 </header>
 
 <div class="wrap">
@@ -88,7 +89,9 @@
     <div class="row"><label>Bundling / Isi<small>Pack per banded (kosong = 1)</small></label><input id="bundling" type="number" inputmode="decimal" step="any" min="0" value="1"></div>
 
     <h2 style="margin-top:16px">Harga</h2>
-    <div class="row"><label>Rencana Harga / Pack<small>Include PPN</small></label><input id="price" type="number" inputmode="decimal" step="any" min="0" value="25000"></div>
+    <div class="row"><label>Harga yang Diinput</label>
+      <select id="mode"><option value="inc">Include PPN</option><option value="exc">Exclude PPN</option></select></div>
+    <div class="row"><label>Rencana Harga / Pack<small id="priceNote">Include PPN</small></label><input id="price" type="number" inputmode="decimal" step="any" min="0" value="25000"></div>
     <div class="row"><label>PPN (%)</label><input id="ppn" type="number" inputmode="decimal" step="any" min="0" value="11"></div>
 
     <div class="btns">
@@ -110,13 +113,13 @@
       <div class="sub">P x L / 10.000 x Sheets x GSM x Ply x Isi</div>
     </div>
     <div class="mini">
-      <div class="kpi"><div class="lbl">Harga / Pack Exc PPN</div><div class="val" id="o_priceExc">-</div></div>
+      <div class="kpi"><div class="lbl" id="l_priceOther">Harga / Pack Exc PPN</div><div class="val" id="o_priceExc">-</div></div>
       <div class="kpi"><div class="lbl">Harga / Unit Exc PPN</div><div class="val" id="o_unit">-</div></div>
       <div class="kpi"><div class="lbl">Harga / Sheet Exc PPN</div><div class="val" id="o_sheet">-</div></div>
       <div class="kpi"><div class="lbl">Total Sheet</div><div class="val" id="o_totalSheet">-</div></div>
     </div>
     <div class="note">
-      Price/KG = Harga Pack ÷ (1 + PPN) ÷ Berat × 1.000.<br>
+      Price/KG = Harga Pack Exc PPN ÷ Berat × 1.000. Jika input Include PPN, harga dibagi (1 + PPN) dulu.<br>
       Harga/Unit = harga per pack ÷ isi bundling. Harga/Sheet = harga per unit ÷ sheets.
     </div>
   </div>
@@ -144,16 +147,21 @@ function calculate(){
   var isi = n('bundling') || 1, price = n('price'), ppn = n('ppn') / 100;
 
   var weight   = L * W / 10000 * sheets * gsm * ply * isi;   // gram per pack
-  var priceExc = price / (1 + ppn);
+  var isExc    = $('mode').value === 'exc';
+  var priceExc = isExc ? price : price / (1 + ppn);   // harga tanpa PPN
+  var priceInc = isExc ? price * (1 + ppn) : price;   // harga dengan PPN
   var kgExc    = weight ? priceExc / weight * 1000 : 0;
-  var kgInc    = weight ? price / weight * 1000 : 0;
+  var kgInc    = weight ? priceInc / weight * 1000 : 0;
   var unit     = priceExc / isi;
   var perSheet = sheets ? unit / sheets : 0;
 
   $('o_weight').textContent     = fmt(weight, 2) + ' gr';
   $('o_kgExc').textContent      = weight ? rp(kgExc) : '-';
   $('o_kgInc').textContent      = weight ? 'Include PPN: ' + rp(kgInc) + ' / kg' : 'Lengkapi spesifikasi untuk menghitung berat';
-  $('o_priceExc').textContent   = rp(priceExc);
+  $('priceNote').textContent    = isExc ? 'Exclude PPN' : 'Include PPN';
+  $('l_priceOther').textContent = isExc ? 'Harga / Pack Inc PPN' : 'Harga / Pack Exc PPN';
+  $('o_priceExc').textContent   = rp(isExc ? priceInc : priceExc);
+  try { localStorage.setItem('pricekg_mode', $('mode').value); } catch (e) {}
   $('o_unit').textContent       = rp(unit);
   $('o_sheet').textContent      = rp(perSheet, 2);
   $('o_totalSheet').textContent = fmt(sheets * isi, 0);
@@ -181,6 +189,7 @@ function saveHistory(){
   if (!r.weight || !n('price')) { toast('Isi spesifikasi & harga dulu sebelum menyimpan'); return; }
   var entry = { time: Date.now(), weight: r.weight, kgExc: r.kgExc };
   FIELDS.forEach(function(f){ entry[f] = n(f); });
+  entry.mode = $('mode').value;
   var h = loadHistory();
   h.push(entry);                       // tambah di akhir (terbaru)
   while (h.length > HMAX) h.shift();   // hapus yang paling lama
@@ -190,6 +199,7 @@ function saveHistory(){
 function useHistory(i){
   var e = loadHistory()[i]; if (!e) return;
   FIELDS.forEach(function(f){ $(f).value = e[f]; });
+  $('mode').value = e.mode || 'inc';
   calculate();
   window.scrollTo({ top: 0, behavior: 'smooth' });
   toast('Perhitungan dimuat');
@@ -215,7 +225,7 @@ function renderHistory(){
                 d.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' });
     html += '<div class="hitem"><div class="info">' +
       '<div class="kg">' + rp(e.kgExc) + ' /kg</div>' +
-      '<div class="det">' + rp(e.price) + ' · ' + fmt(e.ply, 1) + 'ply ' + fmt(e.sheets, 0) + 'sh ' + fmt(e.gsm, 1) + 'gsm · ' + waktu + '</div>' +
+      '<div class="det">' + rp(e.price) + (e.mode === 'exc' ? ' (exc)' : ' (inc)') + ' · ' + fmt(e.ply, 1) + 'ply ' + fmt(e.sheets, 0) + 'sh ' + fmt(e.gsm, 1) + 'gsm · ' + waktu + '</div>' +
       '</div><button onclick="useHistory(' + i + ')">Pakai</button>' +
       '<button class="x" title="Hapus" onclick="deleteHistory(' + i + ')">×</button></div>';
   }
@@ -231,6 +241,7 @@ function resetForm(){
 }
 
 document.addEventListener('input', calculate);
+try { var m = localStorage.getItem('pricekg_mode'); if (m === 'inc' || m === 'exc') $('mode').value = m; } catch (e) {}
 calculate();
 renderHistory();
 </script>
