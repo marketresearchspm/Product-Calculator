@@ -80,16 +80,16 @@
 <div class="wrap">
   <div class="card">
     <h2>Spesifikasi Produk</h2>
-    <div class="row"><label>Ply</label><input id="ply" type="number" inputmode="decimal" step="any" min="0" value="2"></div>
-    <div class="row"><label>Sheets / Pack</label><input id="sheets" type="number" inputmode="decimal" step="any" min="0" value="200"></div>
-    <div class="row"><label>Grammatur (GSM)</label><input id="gsm" type="number" inputmode="decimal" step="any" min="0" value="15"></div>
-    <div class="row"><label>Sheet Length (cm)</label><input id="length" type="number" inputmode="decimal" step="any" min="0" value="19"></div>
-    <div class="row"><label>Sheet Width (cm)</label><input id="width" type="number" inputmode="decimal" step="any" min="0" value="18"></div>
-    <div class="row"><label>Bundling / Isi<small>Pack per banded (kosong = 1)</small></label><input id="bundling" type="number" inputmode="decimal" step="any" min="0" value="1"></div>
+    <div class="row"><label>Ply</label><input id="ply" type="text" inputmode="decimal" autocomplete="off" value="2"></div>
+    <div class="row"><label>Sheets / Pack</label><input id="sheets" type="text" inputmode="decimal" autocomplete="off" value="200"></div>
+    <div class="row"><label>Grammatur (GSM)</label><input id="gsm" type="text" inputmode="decimal" autocomplete="off" value="15"></div>
+    <div class="row"><label>Sheet Length (cm)</label><input id="length" type="text" inputmode="decimal" autocomplete="off" value="19"></div>
+    <div class="row"><label>Sheet Width (cm)</label><input id="width" type="text" inputmode="decimal" autocomplete="off" value="18"></div>
+    <div class="row"><label>Bundling / Isi<small>Pack per banded (kosong = 1)</small></label><input id="bundling" type="text" inputmode="decimal" autocomplete="off" value="1"></div>
 
     <h2 style="margin-top:16px">Harga</h2>
-    <div class="row"><label>Harga / Pack</label><input id="price" type="number" inputmode="decimal" step="any" min="0" value="25000"></div>
-    <div class="row"><label>PPN (%)</label><input id="pph" type="number" inputmode="decimal" step="any" min="0" value="11"></div>
+    <div class="row"><label>Harga / Pack</label><input id="price" type="text" inputmode="decimal" autocomplete="off" value="25000"></div>
+    <div class="row"><label>PPN (%)</label><input id="pph" type="text" inputmode="decimal" autocomplete="off" value="11"></div>
 
     <div class="btns">
       <button class="primary" onclick="saveHistory()">Simpan ke Riwayat</button>
@@ -134,7 +134,19 @@
 var DEFAULTS = { ply: 2, sheets: 200, gsm: 15, length: 19, width: 18, bundling: 1, price: 25000, pph: 11 };
 
 function $(id){ return document.getElementById(id); }
-function n(id){ var v = parseFloat($(id).value); return isFinite(v) ? v : 0; }
+// Baca angka: terima koma atau titik sebagai desimal (aman untuk iPhone/Safari)
+function parseNum(str){
+  var t = String(str || '').replace(/\s/g, '');
+  if (!t) return 0;
+  if (t.indexOf(',') > -1 && t.indexOf('.') > -1) t = t.replace(/\./g, '').replace(',', '.'); // 1.234,5
+  else if (/^\d{1,3}(\.\d{3})+$/.test(t)) t = t.replace(/\./g, '');                      // 2.015 = dua ribu lima belas
+  else t = t.replace(',', '.');                                                             // 13,5
+  var v = parseFloat(t);
+  return isFinite(v) ? v : 0;
+}
+function n(id){ return parseNum($(id).value); }
+// Tampilkan angka dengan koma desimal
+function show(v){ return String(v).replace('.', ','); }
 function rp(x, d){ return 'Rp' + Number(x || 0).toLocaleString('id-ID', { maximumFractionDigits: d || 0 }); }
 function fmt(x, d){ return Number(x || 0).toLocaleString('id-ID', { maximumFractionDigits: d === undefined ? 2 : d }); }
 
@@ -186,9 +198,9 @@ function saveHistory(){
 
 function useHistory(i){
   var e = loadHistory()[i]; if (!e) return;
-  FIELDS.forEach(function(f){ $(f).value = (e[f] !== undefined) ? e[f] : (f === 'pph' ? 0 : DEFAULTS[f]); });
+  FIELDS.forEach(function(f){ $(f).value = show((e[f] !== undefined) ? e[f] : (f === 'pph' ? 0 : DEFAULTS[f])); });
   // riwayat versi lama yang harganya include PPN -> ubah ke exclude PPN
-  if (e.mode === 'inc') $('price').value = Math.round(e.price / (1 + (e.ppn || 0) / 100) * 100) / 100;
+  if (e.mode === 'inc') $('price').value = show(Math.round(e.price / (1 + (e.ppn || 0) / 100) * 100) / 100);
   calculate();
   window.scrollTo({ top: 0, behavior: 'smooth' });
   toast('Perhitungan dimuat');
@@ -229,7 +241,14 @@ function resetForm(){
   calculate();
 }
 
-document.addEventListener('input', calculate);
+document.addEventListener('input', function(ev){
+  var el = ev.target;
+  if (el.tagName === 'INPUT' && el.getAttribute('inputmode') === 'decimal') {
+    var clean = el.value.replace(/[^0-9.,]/g, '');
+    if (clean !== el.value) el.value = clean;
+  }
+  calculate();
+});
 calculate();
 renderHistory();
 </script>
