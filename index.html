@@ -109,7 +109,7 @@
       <div class="sub">P x L / 10.000 x Sheets x GSM x Ply x Isi</div>
     </div>
     <div class="mini">
-      <div class="kpi"><div class="lbl">Harga / Pack Setelah PPh</div><div class="val" id="o_priceExc">-</div></div>
+      <div class="kpi"><div class="lbl" id="l_pricePph">Harga / Pack + PPh</div><div class="val" id="o_priceExc">-</div></div>
       <div class="kpi"><div class="lbl">Harga / Unit Exc PPN</div><div class="val" id="o_unit">-</div></div>
       <div class="kpi"><div class="lbl">Harga / Sheet Exc PPN</div><div class="val" id="o_sheet">-</div></div>
       <div class="kpi"><div class="lbl">Total Sheet</div><div class="val" id="o_totalSheet">-</div></div>
@@ -151,7 +151,8 @@ function calculate(){
   $('o_weight').textContent     = fmt(weight, 2) + ' gr';
   $('o_kgExc').textContent      = weight ? rp(kgExc) : '-';
   $('l_kgMain').innerHTML       = pph ? 'Price / KG (Exclude PPN &amp; PPh)' : 'Price / KG (Exclude PPN)';
-  $('o_priceExc').textContent   = rp(afterPph);
+  $('l_pricePph').textContent   = 'Harga / Pack + PPh ' + fmt(pph * 100, 2) + '%';
+  $('o_priceExc').textContent   = rp(price + price * pph);   // contoh: 2015 + (2015 x 11%)
   $('o_unit').textContent       = rp(unit);
   $('o_sheet').textContent      = rp(perSheet, 2);
   $('o_totalSheet').textContent = fmt(sheets * isi, 0);
